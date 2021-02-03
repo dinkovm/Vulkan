@@ -208,9 +208,8 @@ public:
         vertexBufferDeviceAddressFloor.deviceAddress = getBufferDeviceAddress(models.floor.vertices.buffer);
         indexBufferDeviceAddressFloor.deviceAddress = getBufferDeviceAddress(models.floor.indices.buffer);
 
-        uint32_t numTrianglesArmor = static_cast<uint32_t>(models.floor.indices.count) / 3;
-        uint32_t numTrianglesFloor = static_cast<uint32_t>(models.model.indices.count) / 3;
-        uint32_t numTriangles = numTrianglesArmor + numTrianglesFloor;
+        uint32_t numTrianglesArmor = static_cast<uint32_t>(models.model.indices.count) / 3;
+        uint32_t numTrianglesFloor = static_cast<uint32_t>(models.floor.indices.count) / 3;
 
         // Build
         constexpr uint32_t GeometryCount = 2;
@@ -245,15 +244,17 @@ public:
         VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo = vks::initializers::accelerationStructureBuildGeometryInfoKHR();
         accelerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
         accelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-        accelerationStructureBuildGeometryInfo.geometryCount = 1 /*GeometryCount*/; // TODO: hangs if > 1
+        accelerationStructureBuildGeometryInfo.geometryCount = GeometryCount;
         accelerationStructureBuildGeometryInfo.pGeometries = accelerationStructureGeometries;
+
+		uint32_t numTriangles[GeometryCount] = { numTrianglesArmor, numTrianglesFloor };
 
         VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = vks::initializers::accelerationStructureBuildSizesInfoKHR();
         vkGetAccelerationStructureBuildSizesKHR(
             device,
             VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
             &accelerationStructureBuildGeometryInfo,
-            &numTriangles,
+            numTriangles,
             &accelerationStructureBuildSizesInfo);
 
         createAccelerationStructure(bottomLevelAS, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, accelerationStructureBuildSizesInfo);
@@ -266,7 +267,7 @@ public:
         //accelerationBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
         accelerationBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
         accelerationBuildGeometryInfo.dstAccelerationStructure = bottomLevelAS.handle;
-        accelerationBuildGeometryInfo.geometryCount = 1 /*GeometryCount*/; // TODO: hangs if > 1
+        accelerationBuildGeometryInfo.geometryCount = GeometryCount;
         accelerationBuildGeometryInfo.pGeometries = accelerationStructureGeometries;
         accelerationBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
 
