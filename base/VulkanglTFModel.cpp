@@ -33,7 +33,7 @@ bool loadImageDataFunc(tinygltf::Image* image, const int imageIndex, std::string
 	return tinygltf::LoadImageData(image, imageIndex, error, warning, req_width, req_height, bytes, size, userData);
 }
 
-bool loadImageDataFuncEmpty(tinygltf::Image* image, const int imageIndex, std::string* error, std::string* warning, int req_width, int req_height, const unsigned char* bytes, int size, void* userData) 
+bool loadImageDataFuncEmpty(tinygltf::Image* image, const int imageIndex, std::string* error, std::string* warning, int req_width, int req_height, const unsigned char* bytes, int size, void* userData)
 {
 	// This function will be used for samples that don't require images to be loaded
 	return true;
@@ -296,7 +296,7 @@ void vkglTF::Texture::fromglTfImage(tinygltf::Image &gltfimage, std::string path
 			vks::tools::exitFatal("Could not load texture from " + filename + "\n\nThe file may be part of the additional asset pack.\n\nRun \"download_assets.py\" in the repository root to download the latest version.", -1);
 		}
 		result = ktxTexture_CreateFromNamedFile(filename.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTexture);
-#endif		
+#endif
 		assert(result == KTX_SUCCESS);
 
 		this->device = device;
@@ -563,7 +563,7 @@ VkVertexInputBindingDescription vkglTF::Vertex::inputBindingDescription(uint32_t
 
 VkVertexInputAttributeDescription vkglTF::Vertex::inputAttributeDescription(uint32_t binding, uint32_t location, VertexComponent component) {
 	switch (component) {
-		case VertexComponent::Position: 
+		case VertexComponent::Position:
 			return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos) });
 		case VertexComponent::Normal:
 			return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal) });
@@ -873,7 +873,7 @@ void vkglTF::Model::loadNode(vkglTF::Node *parent, const tinygltf::Node &node, u
 					vert.uv = bufferTexCoords ? glm::make_vec2(&bufferTexCoords[v * 2]) : glm::vec3(0.0f);
 					if (bufferColors) {
 						switch (numColorComponents) {
-							case 3: 
+							case 3:
 								vert.color = glm::vec4(glm::make_vec3(&bufferColors[v * 3]), 1.0f);
 							case 4:
 								vert.color = glm::make_vec4(&bufferColors[v * 4]);
@@ -947,7 +947,7 @@ void vkglTF::Model::loadSkins(tinygltf::Model &gltfModel)
 	for (tinygltf::Skin &source : gltfModel.skins) {
 		Skin *newSkin = new Skin{};
 		newSkin->name = source.name;
-				
+
 		// Find skeleton root node
 		if (source.skeleton > -1) {
 			newSkin->skeletonRoot = nodeFromIndex(source.skeleton);
@@ -1004,7 +1004,7 @@ void vkglTF::Model::loadMaterials(tinygltf::Model &gltfModel)
 		}
 		if (mat.values.find("baseColorFactor") != mat.values.end()) {
 			material.baseColorFactor = glm::make_vec4(mat.values["baseColorFactor"].ColorFactor().data());
-		}				
+		}
 		if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end()) {
 			material.normalTexture = getTexture(gltfModel.textures[mat.additionalValues["normalTexture"].TextureIndex()].source);
 		} else {
@@ -1082,7 +1082,7 @@ void vkglTF::Model::loadAnimations(tinygltf::Model &gltfModel)
 				}
 			}
 
-			// Read sampler output T/R/S values 
+			// Read sampler output T/R/S values
 			{
 				const tinygltf::Accessor &accessor = gltfModel.accessors[samp.output];
 				const tinygltf::BufferView &bufferView = gltfModel.bufferViews[accessor.bufferView];
@@ -1281,14 +1281,14 @@ void vkglTF::Model::loadFromFile(std::string filename, vks::VulkanDevice *device
 	// Create device local buffers
 	// Vertex buffer
 	VK_CHECK_RESULT(device->createBuffer(
-	    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | memoryPropertyFlags,
+	    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | memoryPropertyFlags,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		vertexBufferSize,
 		&vertices.buffer,
 		&vertices.memory));
 	// Index buffer
 	VK_CHECK_RESULT(device->createBuffer(
-	    VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | memoryPropertyFlags,
+	    VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | memoryPropertyFlags,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		indexBufferSize,
 		&indices.buffer,

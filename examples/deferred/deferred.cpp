@@ -99,8 +99,11 @@ public:
         VkDescriptorSet accel;
 	} descriptorSets;
 
-	VkDescriptorSet descriptorSet;
-	VkDescriptorSetLayout descriptorSetLayout;
+	VkDescriptorSet descriptorSetGfx;
+	VkDescriptorSetLayout descriptorSetLayoutGfx;
+
+    VkDescriptorSet descriptorSetRt;
+    VkDescriptorSetLayout descriptorSetLayoutRt;
 
 	// Framebuffer for offscreen rendering
 	struct FrameBufferAttachment {
@@ -136,7 +139,7 @@ public:
 		camera.position = { 2.15f, 0.3f, -8.75f };
 		camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
 		camera.setPerspective(60.0f, (float)width / (float)height, 0.1f, 256.0f);
-		settings.overlay = true;
+		settings.overlay = false;
         enableExtensions();
 	}
 
@@ -175,7 +178,8 @@ public:
 		vkDestroyPipelineLayout(device, pipelineLayoutGfx, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayoutRt, nullptr);
 
-		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, descriptorSetLayoutGfx, nullptr);
+        vkDestroyDescriptorSetLayout(device, descriptorSetLayoutRt, nullptr);
 
 		// Uniform buffers
 		uniformBuffers.offscreen.destroy();
@@ -771,7 +775,7 @@ public:
 			VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
 			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayoutGfx, 0, 1, &descriptorSet, 0, nullptr);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayoutGfx, 0, 1, &descriptorSetGfx, 0, nullptr);
 
    			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.composition);
 			// Final composition as full screen quad
@@ -798,10 +802,26 @@ public:
 		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
 	}
 
-	void setupDescriptorSetLayout()
-	{
+    void setupDescriptorSetLayoutRt()
+    {
         constexpr auto RtShaderStages = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
 
+        // Deferred shading layout
+        std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
+            // Binding 0 : Acceleration struct
+            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, RtShaderStages, 0),
+        };
+
+        VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+        VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayoutRt));
+
+        // Shared pipeline layout used by all graphics pipelines
+        VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descriptorSetLayoutRt, 1);
+        VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pPipelineLayoutCreateInfo, nullptr, &pipelineLayoutRt));
+    }
+
+	void setupDescriptorSetLayoutGfx()
+	{
 		// Deferred shading layout
 		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
 			// Binding 0 : Vertex shader uniform buffer
@@ -814,22 +834,20 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
 			// Binding 4 : Fragment shader uniform buffer
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
-            // Binding 5 : Fragment shader uniform buffer
-            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, RtShaderStages, 5),
 		};
 
 		VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayout));
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayoutGfx));
 
 		// Shared pipeline layout used by all graphics pipelines
-		VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descriptorSetLayout, 1);
+		VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descriptorSetLayoutGfx, 1);
 		VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pPipelineLayoutCreateInfo, nullptr, &pipelineLayoutGfx));
 	}
 
-	void setupDescriptorSet()
+	void setupDescriptorSetGfx()
 	{
 		std::vector<VkWriteDescriptorSet> writeDescriptorSets;
-		VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayout, 1);
+		VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayoutGfx, 1);
 
 		// Image descriptors for the offscreen color attachments
 		VkDescriptorImageInfo texDescriptorPosition =
@@ -851,16 +869,16 @@ public:
 				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		// Deferred composition
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet));
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSetGfx));
 		writeDescriptorSets = {
 			// Binding 1 : Position texture target
-			vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &texDescriptorPosition),
+			vks::initializers::writeDescriptorSet(descriptorSetGfx, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &texDescriptorPosition),
 			// Binding 2 : Normals texture target
-			vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &texDescriptorNormal),
+			vks::initializers::writeDescriptorSet(descriptorSetGfx, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &texDescriptorNormal),
 			// Binding 3 : Albedo texture target
-			vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &texDescriptorAlbedo),
+			vks::initializers::writeDescriptorSet(descriptorSetGfx, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &texDescriptorAlbedo),
 			// Binding 4 : Fragment shader uniform buffer
-			vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4, &uniformBuffers.composition.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSetGfx, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4, &uniformBuffers.composition.descriptor),
 		};
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 
@@ -888,9 +906,16 @@ public:
 			// Binding 2: Normal map
 			vks::initializers::writeDescriptorSet(descriptorSets.floor, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.floor.normalMap.descriptor)
 		};
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+	}
+
+    void setupDescriptorSetRt()
+    {
+        std::vector<VkWriteDescriptorSet> writeDescriptorSets;
+        VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayoutRt, 1);
 
         // RayTracing
-        VkResult res = vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.accel);
+        VkResult res = vkAllocateDescriptorSets(device, &allocInfo, &descriptorSetRt);
 
         VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo = vks::initializers::writeDescriptorSetAccelerationStructureKHR();
         descriptorAccelerationStructureInfo.accelerationStructureCount = 1;
@@ -900,8 +925,8 @@ public:
         accelerationStructureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         // The specialized acceleration structure descriptor has to be chained
         accelerationStructureWrite.pNext = &descriptorAccelerationStructureInfo;
-        accelerationStructureWrite.dstSet = descriptorSets.accel;
-        accelerationStructureWrite.dstBinding = 5;
+        accelerationStructureWrite.dstSet = descriptorSetRt;
+        accelerationStructureWrite.dstBinding = 0;
         accelerationStructureWrite.descriptorCount = 1;
         accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
@@ -910,8 +935,8 @@ public:
             accelerationStructureWrite,
         };
 
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
-	}
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+    }
 
 	void preparePipelines()
 	{
@@ -1116,11 +1141,13 @@ public:
 
 		prepareOffscreenFramebuffer();
 		prepareUniformBuffers();
-		setupDescriptorSetLayout();
+		setupDescriptorSetLayoutGfx();
+        setupDescriptorSetLayoutRt();
 		preparePipelines();
         createShaderBindingTables();
 		setupDescriptorPool();
-		setupDescriptorSet();
+		setupDescriptorSetGfx();
+        setupDescriptorSetRt();
 		buildCommandBuffers();
 		buildDeferredCommandBuffer();
 		prepared = true;
