@@ -22,7 +22,6 @@
 class VulkanExample : public VulkanRaytracingSample
 {
 public:
-
 	AccelerationStructure bottomLevelAS;
 	AccelerationStructure topLevelAS;
 
@@ -317,7 +316,7 @@ public:
     void createTopLevelAccelerationStructure()
     {
         VkTransformMatrixKHR transformMatrix = {
-            1.0f, 0.0f, 0.0f, 5.0f,
+            1.0f, 0.0f, 0.0f, 0.0f,
             0.0f, 1.0f, 0.0f, 0.0f,
             0.0f, 0.0f, 1.0f, 0.0f };
 
@@ -768,7 +767,7 @@ public:
 		textures.floor.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor01_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
 	}
 
-	void buildCommandBuffers()
+	void buildCommandBuffers(int mode)
 	{
 		VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
 
@@ -789,91 +788,96 @@ public:
 
 		for (int32_t i = 0; i < drawCmdBuffers.size(); ++i)
 		{
+            vkResetCommandBuffer(drawCmdBuffers[i], 0);
+
 			VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
 
-#if 1
-            /*
-                Dispatch the ray tracing commands
-            */
-            vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelines.raytracing);
-            vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelineLayoutRt, 0, 1, &descriptorSetRt, 0, 0);
+            if (mode == 1)
+            {
+                /*
+                    Dispatch the ray tracing commands
+                */
+                vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelines.raytracing);
+                vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelineLayoutRt, 0, 1, &descriptorSetRt, 0, 0);
 
-            VkStridedDeviceAddressRegionKHR emptySbtEntry = {};
-            vkCmdTraceRaysKHR(
-                drawCmdBuffers[i],
-                &shaderBindingTables.raygen.stridedDeviceAddressRegion,
-                &shaderBindingTables.miss.stridedDeviceAddressRegion,
-                &shaderBindingTables.hit.stridedDeviceAddressRegion,
-                &emptySbtEntry,
-                width,
-                height,
-                1);
+                VkStridedDeviceAddressRegionKHR emptySbtEntry = {};
+                vkCmdTraceRaysKHR(
+                    drawCmdBuffers[i],
+                    &shaderBindingTables.raygen.stridedDeviceAddressRegion,
+                    &shaderBindingTables.miss.stridedDeviceAddressRegion,
+                    &shaderBindingTables.hit.stridedDeviceAddressRegion,
+                    &emptySbtEntry,
+                    width,
+                    height,
+                    1);
 
-            /*
-                Copy ray tracing output to swap chain image
-            */
+                /*
+                    Copy ray tracing output to swap chain image
+                */
 
-            // Prepare current swap chain image as transfer destination
-            vks::tools::setImageLayout(
-                drawCmdBuffers[i],
-                swapChain.images[i],
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                subresourceRange);
+                // Prepare current swap chain image as transfer destination
+                vks::tools::setImageLayout(
+                    drawCmdBuffers[i],
+                    swapChain.images[i],
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    subresourceRange);
 
-            // Prepare ray tracing output image as transfer source
-            vks::tools::setImageLayout(
-                drawCmdBuffers[i],
-                storageImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                subresourceRange);
+                // Prepare ray tracing output image as transfer source
+                vks::tools::setImageLayout(
+                    drawCmdBuffers[i],
+                    storageImage.image,
+                    VK_IMAGE_LAYOUT_GENERAL,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    subresourceRange);
 
-            VkImageCopy copyRegion{};
-            copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-            copyRegion.srcOffset = { 0, 0, 0 };
-            copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-            copyRegion.dstOffset = { 0, 0, 0 };
-            copyRegion.extent = { width, height, 1 };
-            vkCmdCopyImage(drawCmdBuffers[i], storageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapChain.images[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+                VkImageCopy copyRegion{};
+                copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+                copyRegion.srcOffset = { 0, 0, 0 };
+                copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+                copyRegion.dstOffset = { 0, 0, 0 };
+                copyRegion.extent = { width, height, 1 };
+                vkCmdCopyImage(drawCmdBuffers[i], storageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapChain.images[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-            // Transition swap chain image back for presentation
-            vks::tools::setImageLayout(
-                drawCmdBuffers[i],
-                swapChain.images[i],
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                subresourceRange);
+                // Transition swap chain image back for presentation
+                vks::tools::setImageLayout(
+                    drawCmdBuffers[i],
+                    swapChain.images[i],
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                    subresourceRange);
 
-            // Transition ray tracing output image back to general layout
-            vks::tools::setImageLayout(
-                drawCmdBuffers[i],
-                storageImage.image,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                VK_IMAGE_LAYOUT_GENERAL,
-                subresourceRange);
-#elif 0
-            renderPassBeginInfo.framebuffer = frameBuffers[i];
+                // Transition ray tracing output image back to general layout
+                vks::tools::setImageLayout(
+                    drawCmdBuffers[i],
+                    storageImage.image,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    VK_IMAGE_LAYOUT_GENERAL,
+                    subresourceRange);
+            }
+            else if (mode == 0)
+            {
+                renderPassBeginInfo.framebuffer = frameBuffers[i];
 
-			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-			VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
-			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+                VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
+                vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
 
-			VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
-			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+                VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
+                vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayoutGfx, 0, 1, &descriptorSetGfx, 0, nullptr);
+                vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayoutGfx, 0, 1, &descriptorSetGfx, 0, nullptr);
 
-   			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.composition);
-			// Final composition as full screen quad
-			// Note: Also used for debug display if debugDisplayTarget > 0
-			vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+                vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.composition);
+                // Final composition as full screen quad
+                // Note: Also used for debug display if debugDisplayTarget > 0
+                vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
 
-			drawUI(drawCmdBuffers[i]);
+                drawUI(drawCmdBuffers[i]);
 
-			vkCmdEndRenderPass(drawCmdBuffers[i]);
-#endif
+                vkCmdEndRenderPass(drawCmdBuffers[i]);
+            }
 
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
@@ -1323,7 +1327,7 @@ public:
 		setupDescriptorPool();
 		setupDescriptorSetGfx();
         setupDescriptorSetRt();
-		buildCommandBuffers();
+		buildCommandBuffers(0);
 		buildDeferredCommandBuffer();
 		prepared = true;
 	}
@@ -1343,6 +1347,21 @@ public:
 			updateUniformBufferOffscreen();
 		}
 	}
+
+    virtual void keyPressed(uint32_t key)
+    {
+        switch (key)
+        {
+        case KEY_B:
+            buildCommandBuffers(0);
+            break;
+        case KEY_N:
+            buildCommandBuffers(1);
+            break;
+        default:
+            break;
+        }
+    }
 
 	virtual void OnUpdateUIOverlay(vks::UIOverlay *overlay)
 	{
