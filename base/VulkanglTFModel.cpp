@@ -1281,14 +1281,14 @@ void vkglTF::Model::loadFromFile(std::string filename, vks::VulkanDevice *device
 	// Create device local buffers
 	// Vertex buffer
 	VK_CHECK_RESULT(device->createBuffer(
-	    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | memoryPropertyFlags,
+	    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | memoryPropertyFlags,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		vertexBufferSize,
 		&vertices.buffer,
 		&vertices.memory));
 	// Index buffer
 	VK_CHECK_RESULT(device->createBuffer(
-	    VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | memoryPropertyFlags,
+	    VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | memoryPropertyFlags,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		indexBufferSize,
 		&indices.buffer,

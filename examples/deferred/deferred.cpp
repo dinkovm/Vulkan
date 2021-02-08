@@ -33,7 +33,6 @@ public:
 		ShaderBindingTable hit;
 	} shaderBindingTables;
 
-    /* TODO: may not need
     struct UniformData {
         glm::mat4 viewInverse;
         glm::mat4 projInverse;
@@ -41,7 +40,6 @@ public:
         int32_t vertexSize;
     } uniformData;
     vks::Buffer ubo;
-    */
 
 	int32_t debugDisplayTarget = 0;
 
@@ -192,6 +190,8 @@ public:
 		textures.floor.colorMap.destroy();
 		textures.floor.normalMap.destroy();
 
+        ubo.destroy();
+
 		vkDestroySemaphore(device, offscreenSemaphore, nullptr);
 	}
 
@@ -317,7 +317,7 @@ public:
     void createTopLevelAccelerationStructure()
     {
         VkTransformMatrixKHR transformMatrix = {
-            1.0f, 0.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f, 5.0f,
             0.0f, 1.0f, 0.0f, 0.0f,
             0.0f, 0.0f, 1.0f, 0.0f };
 
@@ -429,8 +429,6 @@ public:
     */
     void createShaderBindingTables() {
 
-        return;
-
         const uint32_t handleSize = rayTracingPipelineProperties.shaderGroupHandleSize;
         const uint32_t handleSizeAligned = vks::tools::alignedSize(rayTracingPipelineProperties.shaderGroupHandleSize, rayTracingPipelineProperties.shaderGroupHandleAlignment);
         const uint32_t groupCount = static_cast<uint32_t>(shaderGroups.size());
@@ -449,6 +447,32 @@ public:
         // We are using two miss shaders, so we need to get two handles for the miss shader binding table
         memcpy(shaderBindingTables.miss.mapped, shaderHandleStorage.data() + handleSizeAligned, handleSize * 2);
         memcpy(shaderBindingTables.hit.mapped, shaderHandleStorage.data() + handleSizeAligned * 3, handleSize);
+    }
+
+    /*
+        Create the uniform buffer used to pass matrices to the ray tracing ray generation shader
+    */
+    void createUniformBufferRayTracing()
+    {
+        VK_CHECK_RESULT(vulkanDevice->createBuffer(
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &ubo,
+            sizeof(uniformData),
+            &uniformData));
+        VK_CHECK_RESULT(ubo.map());
+
+        updateUniformBufferRayTracing();
+    }
+
+    void updateUniformBufferRayTracing()
+    {
+        uniformData.projInverse = glm::inverse(camera.matrices.perspective);
+        uniformData.viewInverse = glm::inverse(camera.matrices.view);
+        uniformData.lightPos = glm::vec4(cos(glm::radians(timer * 360.0f)) * 40.0f, -50.0f + sin(glm::radians(timer * 360.0f)) * 20.0f, 25.0f + sin(glm::radians(timer * 360.0f)) * 5.0f, 0.0f);
+        // Pass the vertex size to the shader for unpacking vertices
+        uniformData.vertexSize = sizeof(vkglTF::Vertex);
+        memcpy(ubo.mapped, &uniformData, sizeof(uniformData));
     }
 
 	// Enable physical device features required for this example
@@ -761,11 +785,75 @@ public:
 		renderPassBeginInfo.clearValueCount = 2;
 		renderPassBeginInfo.pClearValues = clearValues;
 
+        VkImageSubresourceRange subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
 		for (int32_t i = 0; i < drawCmdBuffers.size(); ++i)
 		{
-			renderPassBeginInfo.framebuffer = frameBuffers[i];
-
 			VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
+
+#if 1
+            /*
+                Dispatch the ray tracing commands
+            */
+            vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelines.raytracing);
+            vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelineLayoutRt, 0, 1, &descriptorSetRt, 0, 0);
+
+            VkStridedDeviceAddressRegionKHR emptySbtEntry = {};
+            vkCmdTraceRaysKHR(
+                drawCmdBuffers[i],
+                &shaderBindingTables.raygen.stridedDeviceAddressRegion,
+                &shaderBindingTables.miss.stridedDeviceAddressRegion,
+                &shaderBindingTables.hit.stridedDeviceAddressRegion,
+                &emptySbtEntry,
+                width,
+                height,
+                1);
+
+            /*
+                Copy ray tracing output to swap chain image
+            */
+
+            // Prepare current swap chain image as transfer destination
+            vks::tools::setImageLayout(
+                drawCmdBuffers[i],
+                swapChain.images[i],
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                subresourceRange);
+
+            // Prepare ray tracing output image as transfer source
+            vks::tools::setImageLayout(
+                drawCmdBuffers[i],
+                storageImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                subresourceRange);
+
+            VkImageCopy copyRegion{};
+            copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+            copyRegion.srcOffset = { 0, 0, 0 };
+            copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+            copyRegion.dstOffset = { 0, 0, 0 };
+            copyRegion.extent = { width, height, 1 };
+            vkCmdCopyImage(drawCmdBuffers[i], storageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapChain.images[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+            // Transition swap chain image back for presentation
+            vks::tools::setImageLayout(
+                drawCmdBuffers[i],
+                swapChain.images[i],
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                subresourceRange);
+
+            // Transition ray tracing output image back to general layout
+            vks::tools::setImageLayout(
+                drawCmdBuffers[i],
+                storageImage.image,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_LAYOUT_GENERAL,
+                subresourceRange);
+#elif 0
+            renderPassBeginInfo.framebuffer = frameBuffers[i];
 
 			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -785,6 +873,7 @@ public:
 			drawUI(drawCmdBuffers[i]);
 
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
+#endif
 
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
@@ -793,9 +882,10 @@ public:
 	void setupDescriptorPool()
 	{
 		std::vector<VkDescriptorPoolSize> poolSizes = {
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 8),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 9),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9),
             vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
+            vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1)
 		};
 
 		VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, 4);
@@ -806,10 +896,17 @@ public:
     {
         constexpr auto RtShaderStages = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
 
-        // Deferred shading layout
         std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-            // Binding 0 : Acceleration struct
-            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, RtShaderStages, 0),
+            // Binding 0: Acceleration structure
+            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0),
+            // Binding 1: Storage image
+            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1),
+            // Binding 2: Uniform buffer
+            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, RtShaderStages, 2),
+            // Binding 3: Vertex buffer
+            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 3),
+            // Binding 4: Index buffer
+            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 4),
         };
 
         VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
@@ -930,9 +1027,21 @@ public:
         accelerationStructureWrite.descriptorCount = 1;
         accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
+        VkDescriptorImageInfo storageImageDescriptor{ VK_NULL_HANDLE, storageImage.view, VK_IMAGE_LAYOUT_GENERAL };
+        VkDescriptorBufferInfo vertexBufferDescriptor{ models.model.vertices.buffer, 0, VK_WHOLE_SIZE };
+        VkDescriptorBufferInfo indexBufferDescriptor{ models.model.indices.buffer, 0, VK_WHOLE_SIZE };
+
         writeDescriptorSets = {
             // Binding 0: Top level acceleration structure
             accelerationStructureWrite,
+            // Binding 1: Ray tracing result image
+            vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, &storageImageDescriptor),
+            // Binding 2: Uniform data
+            vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2, &ubo.descriptor),
+            // Binding 3: Scene vertex buffer
+            vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3, &vertexBufferDescriptor),
+            // Binding 4: Scene index buffer
+            vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4, &indexBufferDescriptor),
         };
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
@@ -996,6 +1105,66 @@ public:
 
 		VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.offscreen));
 	}
+
+    void createRayTracingPipeline()
+    {
+        /*
+            Setup ray tracing shader groups
+        */
+        std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+
+        // Ray generation group
+        {
+            shaderStages.push_back(loadShader(getShadersPath() + "deferred/raygen.rgen.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR));
+            VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
+            shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+            shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+            shaderGroup.generalShader = static_cast<uint32_t>(shaderStages.size()) - 1;
+            shaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
+            shaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
+            shaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+            shaderGroups.push_back(shaderGroup);
+        }
+
+        // Miss group
+        {
+            shaderStages.push_back(loadShader(getShadersPath() + "deferred/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR));
+            VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
+            shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+            shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+            shaderGroup.generalShader = static_cast<uint32_t>(shaderStages.size()) - 1;
+            shaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
+            shaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
+            shaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+            shaderGroups.push_back(shaderGroup);
+            // Second shader for shadows
+            shaderStages.push_back(loadShader(getShadersPath() + "deferred/shadow.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR));
+            shaderGroup.generalShader = static_cast<uint32_t>(shaderStages.size()) - 1;
+            shaderGroups.push_back(shaderGroup);
+        }
+
+        // Closest hit group
+        {
+            shaderStages.push_back(loadShader(getShadersPath() + "deferred/closesthit.rchit.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
+            VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
+            shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+            shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+            shaderGroup.generalShader = VK_SHADER_UNUSED_KHR;
+            shaderGroup.closestHitShader = static_cast<uint32_t>(shaderStages.size()) - 1;
+            shaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
+            shaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+            shaderGroups.push_back(shaderGroup);
+        }
+
+        VkRayTracingPipelineCreateInfoKHR rayTracingPipelineCI = vks::initializers::rayTracingPipelineCreateInfoKHR();
+        rayTracingPipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
+        rayTracingPipelineCI.pStages = shaderStages.data();
+        rayTracingPipelineCI.groupCount = static_cast<uint32_t>(shaderGroups.size());
+        rayTracingPipelineCI.pGroups = shaderGroups.data();
+        rayTracingPipelineCI.maxPipelineRayRecursionDepth = 2;
+        rayTracingPipelineCI.layout = pipelineLayoutRt;
+        VK_CHECK_RESULT(vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rayTracingPipelineCI, nullptr, &pipelines.raytracing));
+    }
 
 	// Prepare and initialize uniform buffer containing shader uniforms
 	void prepareUniformBuffers()
@@ -1139,12 +1308,18 @@ public:
         createBottomLevelAccelerationStructure();
         createTopLevelAccelerationStructure();
 
+        createStorageImage(swapChain.colorFormat, { width, height, 1 });
+        createUniformBufferRayTracing();
+
 		prepareOffscreenFramebuffer();
 		prepareUniformBuffers();
 		setupDescriptorSetLayoutGfx();
         setupDescriptorSetLayoutRt();
 		preparePipelines();
+
+        createRayTracingPipeline();
         createShaderBindingTables();
+
 		setupDescriptorPool();
 		setupDescriptorSetGfx();
         setupDescriptorSetRt();
@@ -1161,6 +1336,7 @@ public:
 		if (!paused)
 		{
 			updateUniformBufferComposition();
+            updateUniformBufferRayTracing();
 		}
 		if (camera.updated)
 		{
