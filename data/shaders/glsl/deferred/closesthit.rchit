@@ -16,6 +16,8 @@ layout(binding = 2, set = 0) uniform UBO
 } ubo;
 layout(binding = 3, set = 0) buffer Vertices { vec4 v[]; } vertices;
 layout(binding = 4, set = 0) buffer Indices { uint i[]; } indices;
+layout (binding = 5) uniform sampler2D samplerColor;
+layout (binding = 6) uniform sampler2D samplerNormalMap;
 
 struct Vertex
 {
@@ -41,6 +43,7 @@ Vertex unpack(uint index)
 	v.pos = d0.xyz;
 	v.normal = vec3(d0.w, d1.x, d1.y);
 	v.color = vec4(d2.x, d2.y, d2.z, 1.0);
+  v.color = vec4(1,0,0,1);
 
 	return v;
 }
