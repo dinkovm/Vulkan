@@ -880,7 +880,7 @@ public:
 	{
 		const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
 		models.model.loadFromFile(getAssetPath() + "models/armor/armor.gltf", vulkanDevice, queue, glTFLoadingFlags);
-		models.floor.loadFromFile(getAssetPath() + "models/deferred_floor.gltf", vulkanDevice, queue, glTFLoadingFlags);
+		models.floor.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		textures.model.colorMap.loadFromFile(getAssetPath() + "models/armor/colormap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
 		textures.model.normalMap.loadFromFile(getAssetPath() + "models/armor/normalmap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
 		textures.floor.colorMap.loadFromFile(getAssetPath() + "textures/stonefloor01_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
@@ -1006,7 +1006,7 @@ public:
 	void setupDescriptorPool()
 	{
 		std::vector<VkDescriptorPoolSize> poolSizes = {
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 11),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 12),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 13),
             vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
             vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1)
@@ -1042,7 +1042,9 @@ public:
             // Binding 9 : Position texture target (floor)
             vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 9),
             // Binding 10 : Normals texture target (floor)
-            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 10),
+		    vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 10),
+		    // Binding 11 : Fragment shader uniform buffer
+		    vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 11),
         };
 
         VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
@@ -1184,14 +1186,16 @@ public:
             vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.model.colorMap.descriptor),
             // Binding 6: Normal map
             vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &textures.model.normalMap.descriptor),
-            // Binding 3: Scene vertex buffer (floor)
+            // Binding 7: Scene vertex buffer (floor)
             vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7, &vertexBufferDescriptorFloor),
-            // Binding 4: Scene index buffer (floor)
+            // Binding 8: Scene index buffer (floor)
             vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8, &indexBufferDescriptorFloor),
-            // Binding 5: Color map (floor)
+            // Binding 9: Color map (floor)
             vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.floor.colorMap.descriptor),
-            // Binding 6: Normal map (floor)
-            vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10, &textures.floor.normalMap.descriptor)
+            // Binding 10: Normal map (floor)
+		    vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10, &textures.floor.normalMap.descriptor),
+		    // Binding 11 : Fragment shader uniform buffer
+		    vks::initializers::writeDescriptorSet(descriptorSetRt, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 11, &uniformBuffers.composition.descriptor),
         };
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
@@ -1396,8 +1400,8 @@ public:
 		uboComposition.lights[5].color = glm::vec3(1.0f, 0.7f, 0.3f);
 		uboComposition.lights[5].radius = 25.0f;
 
-		uboComposition.lights[0].position.x = sin(glm::radians(360.0f * timer)) * 5.0f;
-		uboComposition.lights[0].position.z = cos(glm::radians(360.0f * timer)) * 5.0f;
+		uboComposition.lights[0].position.x = sin(glm::radians(360.0f * timer)) * 2.0f;
+		uboComposition.lights[0].position.z = cos(glm::radians(360.0f * timer)) * 2.0f;
 
 		uboComposition.lights[1].position.x = -4.0f + sin(glm::radians(360.0f * timer) + 45.0f) * 2.0f;
 		uboComposition.lights[1].position.z =  0.0f + cos(glm::radians(360.0f * timer) + 45.0f) * 2.0f;

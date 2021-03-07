@@ -2,7 +2,16 @@
 #extension GL_EXT_ray_tracing : require
 #extension GL_EXT_nonuniform_qualifier : enable
 
-layout(location = 0) rayPayloadInEXT vec3 hitValue;
+struct Payload
+{
+	vec4 albedo;
+	vec3 hitPos;
+	vec3 hitNormal;
+	float reflectance;
+	int material;
+};
+
+layout(location = 0) rayPayloadInEXT Payload payload;
 //layout(location = 2) rayPayloadEXT bool shadowed;
 hitAttributeEXT vec3 attribs;
 
@@ -47,15 +56,21 @@ Vertex unpack(uint index)
 	v.normal = vec3(d0.w, d1.x, d1.y);
 	v.uv = vec2(d1.z, d1.w);
 	v.color = vec4(d2.x, d2.y, d2.z, 1.0);
-  v.tangent = d5.xyz;
+	v.tangent = d5.xyz;
   
 	return v;
 }
 
 void main()
 {
-  hitValue = vec3(1,0,0);
+  vec3 center = vec3(4,0,-4);
  
+	payload.albedo = vec4(1,0,0,0);
+	payload.hitPos = gl_WorldRayOriginEXT + (gl_HitTEXT * gl_ObjectRayDirectionEXT);
+	payload.hitNormal = normalize(payload.hitPos - center);
+	payload.reflectance = 1.0f;
+	payload.material = 2;
+
 	// Shadow casting
 	//float tmin = 0.001;
 	//float tmax = 10000.0;

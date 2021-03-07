@@ -2,7 +2,16 @@
 #extension GL_EXT_ray_tracing : require
 #extension GL_EXT_nonuniform_qualifier : enable
 
-layout(location = 0) rayPayloadInEXT vec3 hitValue;
+struct Payload
+{
+	vec4 albedo;
+	vec3 hitPos;
+	vec3 hitNormal;
+	float reflectance;
+	int material;
+};
+
+layout(location = 0) rayPayloadInEXT Payload payload;
 //layout(location = 2) rayPayloadEXT bool shadowed;
 hitAttributeEXT vec3 attribs;
 
@@ -67,15 +76,23 @@ void main()
 	vec3 B = cross(N, T);
 	mat3 TBN = mat3(T, B, N);
   
-  vec2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
-  vec4 color = texture(samplerColor, uv);
-  vec3 normal = TBN * normalize(texture(samplerNormalMap, uv).xyz * 2.0 - vec3(1.0));
+	vec2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
+	vec4 albedo = texture(samplerColor, uv);
+	vec3 normal = TBN * normalize(texture(samplerNormalMap, uv).xyz * 2.0 - vec3(1.0));
+	//vec3 fragPos = ((v0.pos * barycentricCoords.x + v1.pos * barycentricCoords.y + v2.pos * barycentricCoords.z) * gl_ObjectToWorldEXT).xyz;
+        vec3 fragPos = gl_WorldRayOriginEXT + (gl_HitTEXT * gl_ObjectRayDirectionEXT);
 
 	// Basic lighting
-	vec3 lightVector = normalize(ubo.lightPos.xyz);
-	float dot_product = max(dot(lightVector, normal), 0.2);
-	hitValue = color.rgb * dot_product;
- 
+	//vec3 lightVector = normalize(ubo.lightPos.xyz);
+	//float dot_product = max(dot(lightVector, normal), 0.2);
+	//hitValue = albedo.rgb * dot_product;
+
+	payload.albedo = albedo;
+	payload.hitPos = fragPos;
+	payload.hitNormal = normal;
+	payload.reflectance = 1.0f;
+	payload.material = 0;
+
 	// Shadow casting
 	//float tmin = 0.001;
 	//float tmax = 10000.0;
