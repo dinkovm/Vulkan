@@ -90,7 +90,7 @@ void main()
 	payload.albedo = albedo;
 	payload.hitPos = fragPos;
 	payload.hitNormal = normal;
-	payload.reflectance = 1.0f;
+	payload.reflectance = 0.3f;
 	payload.material = 0;
 
 	// Shadow casting

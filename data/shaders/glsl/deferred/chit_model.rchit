@@ -87,10 +87,14 @@ void main()
 	//float dot_product = max(dot(lightVector, normal), 0.2);
 	//hitValue = albedo.rgb * dot_product;
 
+  //if (gl_InstanceID == 1) albedo.rgb = vec3(0,1,0);
+  //else if (gl_InstanceID == 2) albedo.rgb = vec3(1,0,0);
+  //else albedo.rgb = vec3(0,0,1);
+
 	payload.albedo = albedo;
 	payload.hitPos = fragPos;
 	payload.hitNormal = normal;
-	payload.reflectance = 1.0f;
+	payload.reflectance = 0.7f;
 	payload.material = 0;
 
 	// Shadow casting

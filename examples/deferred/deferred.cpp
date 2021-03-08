@@ -82,6 +82,7 @@ public:
 		Light lights[LightCount];
 		glm::vec4 viewPos;
 		int debugDisplayTarget = 0;
+        uint32_t frame = 0;
 	} uboComposition;
 
 	struct {
@@ -445,9 +446,11 @@ public:
             instances[3].transform = transformMatrix;
             instances[3].instanceCustomIndex = 0;
             instances[3].mask = 0xFF;
-            instances[3].instanceShaderBindingTableRecordOffset = 2;
+            //instances[3].instanceShaderBindingTableRecordOffset = 2;
+            instances[3].instanceShaderBindingTableRecordOffset = 1;
             instances[3].flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-            instances[3].accelerationStructureReference = lightAS[0].deviceAddress;
+            instances[3].accelerationStructureReference = modelAS.deviceAddress;
+            //instances[3].accelerationStructureReference = lightAS[0].deviceAddress;
         }
 
         // Buffer for instance data
@@ -880,7 +883,7 @@ public:
 	{
 		const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
 		models.model.loadFromFile(getAssetPath() + "models/armor/armor.gltf", vulkanDevice, queue, glTFLoadingFlags);
-		models.floor.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
+		models.floor.loadFromFile(getAssetPath() + "models/deferred_box2.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		textures.model.colorMap.loadFromFile(getAssetPath() + "models/armor/colormap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
 		textures.model.normalMap.loadFromFile(getAssetPath() + "models/armor/normalmap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
 		textures.floor.colorMap.loadFromFile(getAssetPath() + "textures/stonefloor01_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
@@ -1419,6 +1422,8 @@ public:
 		uboComposition.viewPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
 
 		uboComposition.debugDisplayTarget = debugDisplayTarget;
+
+        uboComposition.frame++;
 
 		memcpy(uniformBuffers.composition.mapped, &uboComposition, sizeof(uboComposition));
 	}

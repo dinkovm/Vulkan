@@ -33,6 +33,7 @@ layout (binding = 11, set = 0) uniform UBO2
 	Light lights[6];
 	vec4 viewPos;
 	int displayDebugTarget;
+	uint frame;
 } ubo2;
 
 const float pi = 3.141592653589793;
@@ -79,18 +80,19 @@ mat3 generateBases(vec3 up)
 	return bases;
 }
 
-vec3 calculateLighting(float ambient)
+vec3 calculateLighting(inout float attenuation, float distOffset)
 {
 	#define lightCount 6
+	#define ambient 0.0f
 
 	vec3 color = vec3(ambient);
 
-	for(int i = 0; i < 1/*lightCount*/; ++i)
+	for(int i = 0; i < lightCount; ++i)
 	{
 		// Vector to light
 		vec3 L = ubo2.lights[i].position.xyz - payload.hitPos;
 		// Distance from light to fragment position
-		float dist = length(L);
+		float dist = length(L) + distOffset;
 
 		// Viewer to fragment
 		vec3 V = ubo2.viewPos.xyz - payload.hitPos;
@@ -138,7 +140,7 @@ void main()
 	vec2 d = inUV * 2.0 - 1.0;
 
 	vec4 origin = cam.viewInverse * vec4(0,0,0,1);
-	vec4 target = cam.projInverse * vec4(d.x, d.y, 1, 1) ;
+	vec4 target = cam.projInverse * vec4(d.x, d.y, 1, 1);
 	vec4 direction = cam.viewInverse*vec4(normalize(target.xyz / target.w), 0) ;
 
 	uint rayFlags = gl_RayFlagsOpaqueEXT;
@@ -147,30 +149,32 @@ void main()
 	float tmax = 10000.0;
 
 	traceRayEXT(topLevelAS, rayFlags, cullMask, 0, 1, 0, origin.xyz, tmin, direction.xyz, tmax, 0);
-	vec3 color = payload.albedo.rgb;//calculateLighting(0.2);
+
+	float attenuation0 = 1.0f;
+	vec3 color = calculateLighting(attenuation0, 0);//payload.albedo.rgb;
 
 #if 1
-	float attenuation = 1.0f;
-
-	const uint SampleCount = 1;
+	const uint SampleCount = 3;
 	vec3 samples = vec3(0);
 
 	Payload initPayload = payload;
+
+	uint seed0 = gl_LaunchIDEXT.x * ubo2.frame;
+	uint seed1 = gl_LaunchIDEXT.y * ubo2.frame;
 
 	for (uint sampleIdx = 0; sampleIdx < SampleCount; sampleIdx++)
 	{
 		samples += color;
 		payload = initPayload;
+		float attenuation = attenuation0;
+		float distOffset = 0.0f;
 
-		const uint BounceCount = 1;
+		const uint BounceCount = 3;
 		for (uint bounceIdx = 0; bounceIdx < BounceCount; bounceIdx++)
 		{
 			float colorScalar = 1.0f;
 
 			// Assume Lambertian material
-
-			uint seed0 = gl_LaunchIDEXT.x * (sampleIdx + 1);
-			uint seed1 = gl_LaunchIDEXT.y * (sampleIdx + 1);
 
 			// Create a local coordinate-system at point
 			mat3 localBases = generateBases(payload.hitNormal);
@@ -185,6 +189,8 @@ void main()
 			const float cartesianSampleU = random(vec2(random(seed0, seed1), random(seed0, seed1)));
 			const float cartesianSampleV = random(vec2(random(seed1, seed0), random(seed1, seed0)));
 #endif
+
+      distOffset += length(origin.xyz - payload.hitPos);
 
 			// Local space
 #if UNIFORM_SAMPLING
@@ -205,10 +211,8 @@ void main()
 
 			origin = vec4(payload.hitPos + (0.0001 * payload.hitNormal), 1);
 
-			attenuation *= payload.reflectance;
-
 			traceRayEXT(topLevelAS, rayFlags, cullMask, 0, 1, 0, origin.xyz, tmin, direction.xyz, tmax, 0);
-			samples += attenuation * /*calculateLighting(0.0f)*/payload.albedo.rgb * colorScalar;	
+			samples += calculateLighting(attenuation, distOffset)/*payload.albedo.rgb*/ * colorScalar;	
 		}
 	}
 

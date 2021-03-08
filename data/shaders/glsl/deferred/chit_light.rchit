@@ -65,10 +65,10 @@ void main()
 {
   vec3 center = vec3(4,0,-4);
  
-	payload.albedo = vec4(1,0,0,0);
+	payload.albedo = vec4(0,0,1,0);
 	payload.hitPos = gl_WorldRayOriginEXT + (gl_HitTEXT * gl_ObjectRayDirectionEXT);
 	payload.hitNormal = normalize(payload.hitPos - center);
-	payload.reflectance = 1.0f;
+	payload.reflectance = 0.5f;
 	payload.material = 2;
 
 	// Shadow casting
